@@ -7,7 +7,6 @@ import math
 from diffusers import StableDiffusionPipeline, DDIMScheduler
 import torch.nn.functional as nnf
 import numpy as np
-import matplotlib.pyplot as plt
 import abc
 import cv2
 import ptp_utils
