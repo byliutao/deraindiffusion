@@ -406,7 +406,7 @@ def show_cross_attention(attention_store: Union[AttentionStore, WplusAttentionSt
         image = np.array(Image.fromarray(image).resize((256, 256)))
         image = ptp_utils.text_under_image(image, decoder(int(tokens[i])))
         images.append(image)
-    ptp_utils.view_images(np.stack(images, axis=0))
+    ptp_utils.get_view_images(np.stack(images, axis=0))
 
     if negative_prompt is not None:
         tokens = model.tokenizer.encode(negative_prompt)
@@ -421,7 +421,7 @@ def show_cross_attention(attention_store: Union[AttentionStore, WplusAttentionSt
             image = np.array(Image.fromarray(image).resize((256, 256)))
             image = ptp_utils.text_under_image(image, decoder(int(tokens[i])))
             images.append(image)
-        ptp_utils.view_images(np.stack(images, axis=0))
+        ptp_utils.get_view_images(np.stack(images, axis=0))
     
 
 def show_self_attention_comp(prompts, attention_store: AttentionStore, res: int, from_where: List[str],
@@ -437,7 +437,7 @@ def show_self_attention_comp(prompts, attention_store: AttentionStore, res: int,
         image = Image.fromarray(image).resize((256, 256))
         image = np.array(image)
         images.append(image)
-    ptp_utils.view_images(np.concatenate(images, axis=1))
+    ptp_utils.get_view_images(np.concatenate(images, axis=1))
 
 def load_512(image_path, left=0, right=0, top=0, bottom=0):
     if type(image_path) is str:
@@ -921,7 +921,7 @@ class MatrixInversion:
             bar.close()
         return uncond_embeddings_list, w_matrices_list
     
-    def invert(self, image_path: str, prompt: str, offsets=(0,0,0,0),num_inner_steps=10, early_stop_epsilon=1e-5, verbose=False, learning_rate = 1e-0, verbose_bar=True):
+    def invert(self, image_path: str, prompt: str, offsets=(0,0,0,0),num_inner_steps=10, early_stop_epsilon=1e-5, verbose=False, learning_rate = 1e-0):
         self.init_prompt(prompt)
         ptp_utils.register_attention_control(self.model, None)
         image_gt = load_512(image_path, *offsets)
@@ -930,7 +930,7 @@ class MatrixInversion:
         image_rec, ddim_latents = self.ddim_inversion(image_gt)
         if verbose:
             print("Guidance Matrix optimization...")
-        uncond_embeddings, w_matrices = self.matrix_optimization(ddim_latents, num_inner_steps, early_stop_epsilon, learning_rate, verbose=verbose_bar)
+        uncond_embeddings, w_matrices = self.matrix_optimization(ddim_latents, num_inner_steps, early_stop_epsilon, learning_rate, verbose=verbose)
         return (image_gt, image_rec), ddim_latents[-1], uncond_embeddings, w_matrices
         
     
@@ -1060,7 +1060,7 @@ def run_and_display(model, prompts, controller, latent=None, run_baseline=False,
         print("with prompt-to-prompt")
     images, x_t = text2image_ldm_stable(model, prompts, controller, latent=latent, num_inference_steps=NUM_DDIM_STEPS, guidance_scale=GUIDANCE_SCALE, generator=generator, uncond_embeddings=uncond_embeddings, optimize_matrices=optimize_matrices, optimize_matrices_=optimize_matrices_uncond, negative_prompt=negative_prompt, tao=tao, verbose_bar=verbose_bar)
     if verbose:
-        ptp_utils.view_images(images)
+        ptp_utils.get_view_images(images)
     return images, x_t
 
 
