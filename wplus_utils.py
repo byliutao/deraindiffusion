@@ -1,31 +1,24 @@
-import torchvision.transforms.functional as F
-from IPython.display import display
 from typing import Optional, Union, Tuple, List, Callable, Dict
 from tqdm.notebook import tqdm
 import torch
-import math
 from diffusers import StableDiffusionPipeline, DDIMScheduler
 import torch.nn.functional as nnf
 import numpy as np
 import abc
-import cv2
 import ptp_utils
 import seq_aligner
-import shutil
 from torch.optim.adam import Adam
 from PIL import Image
-import os
-from transformers import Blip2Processor, Blip2ForConditionalGeneration
-from skimage.metrics import mean_squared_error as compare_mse
-from skimage.metrics import peak_signal_noise_ratio as compare_psnr
-from skimage.metrics import structural_similarity as compare_ssim
-import time
 
-LOW_RESOURCE = True 
-NUM_DDIM_STEPS =  50 #origin: 50
-GUIDANCE_SCALE = 7.5
-MAX_NUM_WORDS = 77
-device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+
+def init_global(args, sd_tokenizer):
+    global LOW_RESOURCE, NUM_DDIM_STEPS, GUIDANCE_SCALE, MAX_NUM_WORDS, device, tokenizer
+    LOW_RESOURCE = args.low_resource 
+    NUM_DDIM_STEPS =  args.num_ddim_steps
+    GUIDANCE_SCALE = args.guidance_scale
+    MAX_NUM_WORDS = args.max_num_words
+    device = torch.device(args.device) if torch.cuda.is_available() else torch.device('cpu')
+    tokenizer = sd_tokenizer
 
 
 class LocalBlend:
@@ -1068,22 +1061,17 @@ def getFreq(image):
     grayscale = np.dot(image[...,:3], [0.2989, 0.5870, 0.1140])
 
     image = np.array(grayscale)
-    # 执行傅里叶变换
     f_transform = np.fft.fft2(image)
     
-    # 中心化频谱（将低频分量移到中心）
     f_transform_shifted = np.fft.fftshift(f_transform)
     
-    # 创建一个掩码，将低频分量保留下来
     rows, cols = image.shape
     center_row, center_col = rows // 2, cols // 2
     mask = np.zeros((rows, cols), dtype=np.uint8)
     mask[center_row - 30:center_row + 30, center_col - 30:center_col + 30] = 1
     
-    # 将高频分量置零
     f_transform_shifted *= mask
     
-    # 逆傅里叶变换以获取低频和高频分量
     low_frequency_component = np.fft.ifft2(np.fft.ifftshift(f_transform_shifted)).real
     high_frequency_component = image - low_frequency_component
     

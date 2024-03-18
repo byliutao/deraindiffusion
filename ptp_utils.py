@@ -36,7 +36,7 @@ def text_under_image(image: np.ndarray, text: str, text_color: Tuple[int, int, i
     return img
 
 
-def get_view_images(images, num_rows=1, offset_ratio=0.02):
+def get_view_images(images, num_rows=1, offset_ratio=0.02, verbose=True):
     if type(images) is list:
         num_empty = len(images) % num_rows
     elif images.ndim == 4:
@@ -60,7 +60,8 @@ def get_view_images(images, num_rows=1, offset_ratio=0.02):
                 i * num_cols + j]
 
     pil_img = Image.fromarray(image_)
-    display(pil_img)
+    if verbose == True:
+        display(pil_img)
     return pil_img
 
 
