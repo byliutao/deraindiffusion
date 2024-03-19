@@ -28,7 +28,7 @@ class LocalBlend:
         maps = (maps * alpha).sum(-1).mean(1)
         if use_pool:
             maps = nnf.max_pool2d(maps, (k * 2 + 1, k * 2 +1), (1, 1), padding=(k, k))
-        mask = nnf.interpolate(maps, size=(x_t.shape[2:]))
+        mask = nnf.interpolate(maps, size=(self.x_t.shape[2:]))
         mask = mask / mask.max(2, keepdims=True)[0].max(3, keepdims=True)[0]
         mask = mask.gt(self.th[1-int(use_pool)])
         mask = mask[:1] + mask
@@ -49,7 +49,8 @@ class LocalBlend:
             x_t = x_t[:1] + mask * (x_t - x_t[:1])
         return x_t
        
-    def __init__(self, prompts: List[str], words: [List[List[str]]], substruct_words=None, start_blend=0.2, th=(.3, .3)):
+    def __init__(self, prompts: List[str], words: [List[List[str]]], x_t, substruct_words=None, start_blend=0.2, th=(.3, .3)):
+        self.x_t = x_t
         alpha_layers = torch.zeros(len(prompts),  1, 1, 1, 1, MAX_NUM_WORDS)
         for i, (prompt, words_) in enumerate(zip(prompts, words)):
             if type(words_) is str:
@@ -370,11 +371,11 @@ def aggregate_attention(prompts, attention_store: Union[AttentionStore, WplusAtt
     return out.cpu()
 
 
-def make_controller(prompts: List[str], is_replace_controller: bool, cross_replace_steps: Dict[str, float], self_replace_steps: float, blend_words=None, equilizer_params=None) -> AttentionControlEdit:
+def make_controller(prompts: List[str], is_replace_controller: bool, cross_replace_steps: Dict[str, float], self_replace_steps: float, x_t, blend_words=None, equilizer_params=None) -> AttentionControlEdit:
     if blend_words is None:
         lb = None
     else:
-        lb = LocalBlend(prompts, blend_word)
+        lb = LocalBlend(prompts, blend_words, x_t=x_t)
     if is_replace_controller:
         controller = AttentionReplace(prompts, NUM_DDIM_STEPS, cross_replace_steps=cross_replace_steps, self_replace_steps=self_replace_steps, local_blend=lb)
     else:

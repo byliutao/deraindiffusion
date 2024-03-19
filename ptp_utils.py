@@ -61,6 +61,7 @@ def get_view_images(images, num_rows=1, offset_ratio=0.02, verbose=True):
 
     pil_img = Image.fromarray(image_)
     if verbose == True:
+        print("source image | reconstruct image | edited image")
         display(pil_img)
     return pil_img
 

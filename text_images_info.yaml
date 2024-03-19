@@ -1,0 +1,16 @@
+images_path:
+  - "/home/liutao/workspace/deraindiffusion/example_images/remove_test_image/A living area with a television and a table.jpg"
+  - "/home/liutao/workspace/deraindiffusion/example_images/remove_test_image/A man with glasses sitting in front of a laptop computer.jpg"
+  - "/home/liutao/workspace/deraindiffusion/example_images/remove_test_image/A woman wearing sunglasses and scarf.jpg"
+prompts:
+  - "A living area with a television and a table"
+  - "A man with glasses sitting in front of a laptop computer"
+  - "A woman wearing sunglasses and scarf"
+negative_prompts:
+  - "table"
+  - "computer"
+  - "sunglasses"
+seeds:
+  - 2024
+  - 2024
+  - 2024
