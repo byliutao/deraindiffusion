@@ -61,31 +61,23 @@ def get_view_images(images, num_rows=1, offset_ratio=0.02, verbose=True):
 
     pil_img = Image.fromarray(image_)
     if verbose == True:
-        print("source image | reconstruct image | edited image")
         display(pil_img)
     return pil_img
 
 
-def diffusion_step(model, controller, latents, context, t, guidance_scale, low_resource=False, optimize_matrix=None, optimize_matrix_=None):
-    if low_resource:
-        controller.cond = True
-        noise_prediction_text = model.unet(latents, t, encoder_hidden_states=context[1])["sample"]
-        controller.cond = False
-        noise_pred_uncond = model.unet(latents, t, encoder_hidden_states=context[0])["sample"]
-    else:
-        latents_input = torch.cat([latents] * 2)
-        noise_pred = model.unet(latents_input, t, encoder_hidden_states=context)["sample"]
-        noise_pred_uncond, noise_prediction_text = noise_pred.chunk(2)
+def diffusion_step(model, controller, latents, context, t, guidance_scale, optimize_matrix=None, optimize_matrix_=None):
+
+    controller.cond = True
+    noise_prediction_text = model.unet(latents, t, encoder_hidden_states=context[1])["sample"]
+    controller.cond = False
+    noise_pred_uncond = model.unet(latents, t, encoder_hidden_states=context[0])["sample"]
+
     if (optimize_matrix is None) and (optimize_matrix_ is None):
         # print("Zero W Matrix...")
         noise_pred = noise_pred_uncond + guidance_scale * (noise_prediction_text - noise_pred_uncond)
     elif (optimize_matrix is not None) and (optimize_matrix_ is None):
         # print("One W Matrix...")
         noise_pred = noise_pred_uncond + optimize_matrix * (noise_prediction_text - noise_pred_uncond)
-        # identity_tensor = torch.ones(64).unsqueeze(0).unsqueeze(0).to(model.device)  # Shape: (1, 1, 64, 64)
-        # identity_tensor = identity_tensor.expand(1, 4, 64, 64).to(model.device) 
-        # w_fix = 7.5 * identity_tensor
-        # noise_pred = w_fix * noise_prediction_text + optimize_matrix * noise_pred_uncond
     elif (optimize_matrix is not None) and (optimize_matrix_ is not None):
         # print("Two W Matrix...")
         noise_pred =  optimize_matrix_ * noise_pred_uncond + optimize_matrix * noise_prediction_text
@@ -153,7 +145,6 @@ def text2image_ldm_stable(
         guidance_scale: float = 7.5,
         generator: Optional[torch.Generator] = None,
         latent: Optional[torch.FloatTensor] = None,
-        low_resource: bool = False,
 ):
     register_attention_control(model, controller)
     height = width = 512
@@ -174,14 +165,12 @@ def text2image_ldm_stable(
     uncond_embeddings = model.text_encoder(uncond_input.input_ids.to(model.device))[0]
 
     context = [uncond_embeddings, text_embeddings]
-    if not low_resource:
-        context = torch.cat(context)
     latent, latents = init_latent(latent, model, height, width, generator, batch_size)
 
     # set timesteps
     model.scheduler.set_timesteps(num_inference_steps)
     for t in tqdm(model.scheduler.timesteps):
-        latents = diffusion_step(model, controller, latents, context, t, guidance_scale, low_resource)
+        latents = diffusion_step(model, controller, latents, context, t, guidance_scale)
 
     image = latent2image(model.vae, latents)
 

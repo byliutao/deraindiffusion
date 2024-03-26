@@ -12,8 +12,7 @@ from PIL import Image
 
 
 def init_global(args, sd_tokenizer):
-    global LOW_RESOURCE, NUM_DDIM_STEPS, GUIDANCE_SCALE, MAX_NUM_WORDS, device, tokenizer
-    LOW_RESOURCE = args.low_resource 
+    global NUM_DDIM_STEPS, GUIDANCE_SCALE, MAX_NUM_WORDS, device, tokenizer
     NUM_DDIM_STEPS =  args.num_ddim_steps
     GUIDANCE_SCALE = args.guidance_scale
     MAX_NUM_WORDS = args.max_num_words
@@ -99,18 +98,14 @@ class AttentionControl(abc.ABC):
     
     @property
     def num_uncond_att_layers(self):
-        return self.num_att_layers if LOW_RESOURCE else 0
+        return self.num_att_layers
     
     @abc.abstractmethod
     def forward (self, attn, is_cross: bool, place_in_unet: str):
         raise NotImplementedError
 
     def __call__(self, attn, is_cross: bool, place_in_unet: str):
-        if LOW_RESOURCE:
-            attn = self.forward(attn, is_cross, place_in_unet)
-        else:
-            h = attn.shape[0]
-            attn[h // 2:] = self.forward(attn[h // 2:], is_cross, place_in_unet)
+        attn = self.forward(attn, is_cross, place_in_unet)
         self.cur_att_layer += 1
         if self.cur_att_layer == self.num_att_layers + self.num_uncond_att_layers:
             self.cur_att_layer = 0
@@ -154,8 +149,6 @@ class WplusAttentionStore(AttentionControl):
     
 
     def forward(self, attn, is_cross: bool, place_in_unet: str):
-        # print(self.step_replace)
-        # print("cond:",self.cond,"curr_step:",self.cur_step,"curr_layer:",self.cur_att_layer,"is_cross:",is_cross)
         if self.cond is True: # self.cond dicide current branch
             key = f"{place_in_unet}_{'cross' if is_cross else 'self'}"
             if attn.shape[1] <= 32 ** 2:  # avoid memory overhead
@@ -166,7 +159,6 @@ class WplusAttentionStore(AttentionControl):
             if attn.shape[1] <= 32 ** 2:  # avoid memory overhead
                 self.step_store_uncond[key].append(attn)
             if is_cross is False and self.cur_step < self.self_replace_steps * NUM_DDIM_STEPS:
-                # print("key:",key,"len:",len(self.step_store[key]),"idx:",self.step_replace[key])
                 attn = self.step_store[key][self.step_replace[key]]
                 self.step_replace[key] += 1
             elif is_cross is True and self.cur_step < self.cross_replace_steps * NUM_DDIM_STEPS:
@@ -255,93 +247,6 @@ class AttentionStore(AttentionControl):
         self.step_store = self.get_empty_store()
         self.attention_store = {}
         
-class AttentionControlEdit(AttentionStore, abc.ABC):
-    
-    def step_callback(self, x_t):
-        if self.local_blend is not None:
-            x_t = self.local_blend(x_t, self.attention_store)
-        return x_t
-        
-    def replace_self_attention(self, attn_base, att_replace, place_in_unet):
-        if att_replace.shape[2] <= 32 ** 2:
-            attn_base = attn_base.unsqueeze(0).expand(att_replace.shape[0], *attn_base.shape)
-            return attn_base
-        else:
-            return att_replace
-    
-    @abc.abstractmethod
-    def replace_cross_attention(self, attn_base, att_replace):
-        raise NotImplementedError
-    
-    def forward(self, attn, is_cross: bool, place_in_unet: str):
-        super(AttentionControlEdit, self).forward(attn, is_cross, place_in_unet)
-        if is_cross or (self.num_self_replace[0] <= self.cur_step < self.num_self_replace[1]):
-            h = attn.shape[0] // (self.batch_size)
-            attn = attn.reshape(self.batch_size, h, *attn.shape[1:])
-            attn_base, attn_repalce = attn[0], attn[1:]
-            if is_cross:
-                alpha_words = self.cross_replace_alpha[self.cur_step]
-                attn_repalce_new = self.replace_cross_attention(attn_base, attn_repalce) * alpha_words + (1 - alpha_words) * attn_repalce
-                attn[1:] = attn_repalce_new
-            else:
-                attn[1:] = self.replace_self_attention(attn_base, attn_repalce, place_in_unet)
-            attn = attn.reshape(self.batch_size * h, *attn.shape[2:])
-        return attn
-    
-    def __init__(self, prompts, num_steps: int,
-                 cross_replace_steps: Union[float, Tuple[float, float], Dict[str, Tuple[float, float]]],
-                 self_replace_steps: Union[float, Tuple[float, float]],
-                 local_blend: Optional[LocalBlend]):
-        super(AttentionControlEdit, self).__init__()
-        self.batch_size = len(prompts)
-        self.cross_replace_alpha = ptp_utils.get_time_words_attention_alpha(prompts, num_steps, cross_replace_steps, tokenizer).to(device)
-        if type(self_replace_steps) is float:
-            self_replace_steps = 0, self_replace_steps
-        self.num_self_replace = int(num_steps * self_replace_steps[0]), int(num_steps * self_replace_steps[1])
-        self.local_blend = local_blend
-
-class AttentionReplace(AttentionControlEdit):
-
-    def replace_cross_attention(self, attn_base, att_replace):
-        return torch.einsum('hpw,bwn->bhpn', attn_base, self.mapper)
-      
-    def __init__(self, prompts, num_steps: int, cross_replace_steps: float, self_replace_steps: float,
-                 local_blend: Optional[LocalBlend] = None):
-        super(AttentionReplace, self).__init__(prompts, num_steps, cross_replace_steps, self_replace_steps, local_blend)
-        self.mapper = seq_aligner.get_replacement_mapper(prompts, tokenizer).to(device)
-        
-
-class AttentionRefine(AttentionControlEdit):
-
-    def replace_cross_attention(self, attn_base, att_replace):
-        attn_base_replace = attn_base[:, :, self.mapper].permute(2, 0, 1, 3)
-        attn_replace = attn_base_replace * self.alphas + att_replace * (1 - self.alphas)
-        # attn_replace = attn_replace / attn_replace.sum(-1, keepdims=True)
-        return attn_replace
-
-    def __init__(self, prompts, num_steps: int, cross_replace_steps: float, self_replace_steps: float,
-                 local_blend: Optional[LocalBlend] = None):
-        super(AttentionRefine, self).__init__(prompts, num_steps, cross_replace_steps, self_replace_steps, local_blend)
-        self.mapper, alphas = seq_aligner.get_refinement_mapper(prompts, tokenizer)
-        self.mapper, alphas = self.mapper.to(device), alphas.to(device)
-        self.alphas = alphas.reshape(alphas.shape[0], 1, 1, alphas.shape[1])
-
-
-class AttentionReweight(AttentionControlEdit):
-
-    def replace_cross_attention(self, attn_base, att_replace):
-        if self.prev_controller is not None:
-            attn_base = self.prev_controller.replace_cross_attention(attn_base, att_replace)
-        attn_replace = attn_base[None, :, :, :] * self.equalizer[:, None, None, :]
-        # attn_replace = attn_replace / attn_replace.sum(-1, keepdims=True)
-        return attn_replace
-
-    def __init__(self, prompts, num_steps: int, cross_replace_steps: float, self_replace_steps: float, equalizer,
-                local_blend: Optional[LocalBlend] = None, controller: Optional[AttentionControlEdit] = None):
-        super(AttentionReweight, self).__init__(prompts, num_steps, cross_replace_steps, self_replace_steps, local_blend)
-        self.equalizer = equalizer.to(device)
-        self.prev_controller = controller
-
 
 def get_equalizer(text: str, word_select: Union[int, Tuple[int, ...]], values: Union[List[float],
                   Tuple[float, ...]]):
@@ -369,23 +274,6 @@ def aggregate_attention(prompts, attention_store: Union[AttentionStore, WplusAtt
     out = torch.cat(out, dim=0)
     out = out.sum(0) / out.shape[0]
     return out.cpu()
-
-
-def make_controller(prompts: List[str], is_replace_controller: bool, cross_replace_steps: Dict[str, float], self_replace_steps: float, x_t, blend_words=None, equilizer_params=None) -> AttentionControlEdit:
-    if blend_words is None:
-        lb = None
-    else:
-        lb = LocalBlend(prompts, blend_words, x_t=x_t)
-    if is_replace_controller:
-        controller = AttentionReplace(prompts, NUM_DDIM_STEPS, cross_replace_steps=cross_replace_steps, self_replace_steps=self_replace_steps, local_blend=lb)
-    else:
-        controller = AttentionRefine(prompts, NUM_DDIM_STEPS, cross_replace_steps=cross_replace_steps, self_replace_steps=self_replace_steps, local_blend=lb)
-    if equilizer_params is not None:
-        eq = get_equalizer(prompts[1], equilizer_params["words"], equilizer_params["values"])
-        controller = AttentionReweight(prompts, NUM_DDIM_STEPS, cross_replace_steps=cross_replace_steps,
-                                       self_replace_steps=self_replace_steps, equalizer=eq, local_blend=lb, controller=controller)
-    return controller
-
 
 def show_cross_attention(attention_store: Union[AttentionStore, WplusAttentionStore], res: int, from_where: List[str], prompts, model, select: int = 0, negative_prompt = None):
     tokens = model.tokenizer.encode(prompts[select])
@@ -416,8 +304,7 @@ def show_cross_attention(attention_store: Union[AttentionStore, WplusAttentionSt
             image = ptp_utils.text_under_image(image, decoder(int(tokens[i])))
             images.append(image)
         ptp_utils.get_view_images(np.stack(images, axis=0))
-    
-
+  
 def show_self_attention_comp(prompts, attention_store: AttentionStore, res: int, from_where: List[str],
                         max_com=10, select: int = 0):
     attention_maps = aggregate_attention(prompts, attention_store, res, from_where, False, select).numpy().reshape((res ** 2, res ** 2))
@@ -1011,33 +898,24 @@ def text2image_ldm_stable(
         bar = model.scheduler.timesteps[-start_time:]
     for i, t in enumerate(bar):
         if i < NUM_DDIM_STEPS * (1 - tao): #decide which step use negative prompt embedding
-            if not LOW_RESOURCE:
-                context = torch.cat([null_embeddings, text_embeddings])
-            else:
-                context = [null_embeddings, text_embeddings]
+            context = [null_embeddings, text_embeddings]
         else:
             if uncond_embeddings_ is None:
-                if not LOW_RESOURCE:
-                    context = torch.cat([uncond_embeddings[i].expand(*text_embeddings.shape), text_embeddings])
-                else:
-                    context = [uncond_embeddings[i].expand(*text_embeddings.shape), text_embeddings]
+                context = [uncond_embeddings[i].expand(*text_embeddings.shape), text_embeddings]
             else:
-                if not LOW_RESOURCE:
-                    context = torch.cat([uncond_embeddings_, text_embeddings])
-                else:
-                    context = [uncond_embeddings_, text_embeddings]
+                context = [uncond_embeddings_, text_embeddings]
             
         if (optimize_matrices is None) and (optimize_matrices_ is None): #origin
-            latents = ptp_utils.diffusion_step(model, controller, latents, context, t, guidance_scale, low_resource=LOW_RESOURCE)
+            latents = ptp_utils.diffusion_step(model, controller, latents, context, t, guidance_scale)
         elif (optimize_matrices is not None) and (optimize_matrices_ is None): # W+
             optimize_matrix = optimize_matrices[i].to(model.device)
             latents = ptp_utils.diffusion_step(model, controller, latents, context, t, guidance_scale,
-             optimize_matrix=optimize_matrix, low_resource=LOW_RESOURCE)
+             optimize_matrix=optimize_matrix)
         elif (optimize_matrices is not None) and (optimize_matrices_ is not None): # W+ with two matrix(abondon)
             optimize_matrix = optimize_matrices[i].to(model.device)
             optimize_matrix_ = optimize_matrices_[i].to(model.device)
             latents = ptp_utils.diffusion_step(model, controller, latents, context, t, guidance_scale,
-             optimize_matrix=optimize_matrix, optimize_matrix_=optimize_matrix_, low_resource=LOW_RESOURCE)
+             optimize_matrix=optimize_matrix, optimize_matrix_=optimize_matrix_)
         
     if return_type == 'image':
         image = ptp_utils.latent2image(model.vae, latents)

@@ -1,16 +1,68 @@
 images_path:
-  - "/home/liutao/workspace/deraindiffusion/example_images/remove_test_image/A living area with a television and a table.jpg"
-  - "/home/liutao/workspace/deraindiffusion/example_images/remove_test_image/A man with glasses sitting in front of a laptop computer.jpg"
-  - "/home/liutao/workspace/deraindiffusion/example_images/remove_test_image/A woman wearing sunglasses and scarf.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/glass/a man with glass.png"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/glass/a women with a glass.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/other/a black and white cow is eating the grass in a field.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/other/a cat sitting next to a mirror.jpeg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/a bird standing on a fence in the rain.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/A branch full of green leaves in the rain.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/A car window is covered with rain, and outside the window is a pile of cars.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/A green plant in the rain with a fence behind it.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/a people with a red umbrella in rain.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/A plane at the airport in the rain.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/a red flower with green leaves in rain.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/a street in rain.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/A tiger in the grass under the rain.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/An ancient Egyptian statue building in the rain.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/Many green leaves in the rain.jpg"
+  - "/home/liutao/workspace/deraindiffusion/images/test_image/rain/The eaves of an old-fashioned house in the rain.jpg"
 prompts:
-  - "A living area with a television and a table"
-  - "A man with glasses sitting in front of a laptop computer"
-  - "A woman wearing sunglasses and scarf"
+  - "a man with glass"
+  - "a women with a glass"
+  - "a black and white cow is eating the grass in a field"
+  - "a cat sitting next to a mirror"
+  - "a bird standing on a fence in the rain"
+  - "A branch full of green leaves in the rain"
+  - "A car window is covered with rain, and outside the window is a pile of cars"
+  - "A green plant in the rain with a fence behind it"
+  - "a people with a red umbrella in rain"
+  - "A plane at the airport in the rain"
+  - "a red flower with green leaves in rain"
+  - "a street in rain"
+  - "A tiger in the grass under the rain"
+  - "An ancient Egyptian statue building in the rain"
+  - "Many green leaves in the rain"
+  - "The eaves of an old-fashioned house in the rain"
 negative_prompts:
-  - "table"
-  - "computer"
-  - "sunglasses"
+  - "glass"
+  - "glass"
+  - "cow"
+  - "cat"
+  - "rain"
+  - "rain"
+  - "rain"
+  - "rain"
+  - "rain"
+  - "rain"
+  - "rain"
+  - "rain"
+  - "rain"
+  - "rain"
+  - "rain"
+  - "rain"    
 seeds:
+  - 2024
+  - 2024
+  - 2024
+  - 2024
+  - 2024
+  - 2024
+  - 2024
+  - 2024
+  - 2024
+  - 2024
+  - 2024
+  - 2024
+  - 2024
   - 2024
   - 2024
   - 2024
